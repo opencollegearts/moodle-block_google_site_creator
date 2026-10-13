@@ -23,10 +23,7 @@
  */
 
 require_once(__DIR__ . '/../../config.php');
-require_once($CFG->libdir . '/formslib.php');
 require_once(__DIR__ . '/lib.php');
-require_once(__DIR__ . '/classes/form/create_site_form.php');
-require_once(__DIR__ . '/classes/drive_service.php');
 
 $courseid = required_param('courseid', PARAM_INT);
 
@@ -44,7 +41,7 @@ $PAGE->set_heading(format_string($course->fullname));
 $PAGE->navbar->add(get_string('creategooglesite', 'block_google_site_creator'));
 
 $templateid = block_google_site_creator_get_template_id($course->id);
-if (empty($templateid)) {
+if (empty($templateid) || !block_google_site_creator_is_allowed_template_id($templateid)) {
     throw new moodle_exception('notemplate', 'block_google_site_creator');
 }
 
@@ -58,7 +55,7 @@ file_prepare_draft_area(
     ['subdirs' => 0, 'maxfiles' => 1, 'accepted_types' => ['image']]
 );
 
-$form = new block_google_site_creator_create_site_form(
+$form = new \block_google_site_creator\form\create_site_form(
     new moodle_url('/blocks/google_site_creator/create.php', ['courseid' => $course->id]),
     [
         'courseid' => $course->id,
@@ -118,9 +115,10 @@ if ($data = $form->get_data()) {
                 $url = $copy['webViewLink'] ?? $copy['webContentLink'] ?? null;
                 $createdasuser = !empty($newfileid);
             } catch (Throwable $usercopyerror) {
-                debugging(
-                    'Creating site as end user failed, falling back to delegated user: ' . $usercopyerror->getMessage(),
-                    DEBUG_DEVELOPER
+                // Must not call debugging() here: Whoops turns it into an exception and skips fallback.
+                block_google_site_creator_debug_log(
+                    'Creating site as end user failed, falling back to delegated user: '
+                    . $usercopyerror->getMessage()
                 );
             }
         }
@@ -137,11 +135,15 @@ if ($data = $form->get_data()) {
                     $drive->transfer_ownership($newfileid, $owneremail);
                 } catch (Throwable $siteownershipe) {
                     $ownershipfailed = true;
-                    debugging('Site ownership transfer failed: ' . $siteownershipe->getMessage(), DEBUG_DEVELOPER);
+                    block_google_site_creator_debug_log(
+                        'Site ownership transfer failed: ' . $siteownershipe->getMessage()
+                    );
                     try {
                         $drive->add_permission($newfileid, $owneremail, 'writer');
                     } catch (Throwable $addowneraseditore) {
-                        debugging('Adding creator as editor failed: ' . $addowneraseditore->getMessage(), DEBUG_DEVELOPER);
+                        block_google_site_creator_debug_log(
+                            'Adding creator as editor failed: ' . $addowneraseditore->getMessage()
+                        );
                     }
                 }
             }
@@ -154,13 +156,14 @@ if ($data = $form->get_data()) {
             $url = 'https://drive.google.com/file/d/' . $newfileid . '/view';
         }
 
-        $shareok = block_google_site_creator_sync_visibility_permission(
+        $shareresult = block_google_site_creator_sync_visibility_permission(
             $drive,
             $newfileid,
             (int)$course->id,
             $visibility,
             (int)$USER->id
         );
+        $shareok = !empty($shareresult['ok']);
 
         if (!empty(trim((string)$data->description))) {
             $drive->update_file_metadata($newfileid, ['description' => trim((string)$data->description)]);
@@ -173,7 +176,9 @@ if ($data = $form->get_data()) {
                     $drive->add_permission($folderid, $delegateduser, 'writer');
                 }
             } catch (Throwable $keepdelegatededitore) {
-                debugging('Keeping delegated user as editor failed: ' . $keepdelegatededitore->getMessage(), DEBUG_DEVELOPER);
+                block_google_site_creator_debug_log(
+                    'Keeping delegated user as editor failed: ' . $keepdelegatededitore->getMessage()
+                );
             }
         }
 
@@ -185,6 +190,7 @@ if ($data = $form->get_data()) {
             'drive_file_id' => $newfileid,
             'url' => $url,
             'visibility' => $visibility,
+            'managed_permissions' => json_encode(array_values($shareresult['permissionids'] ?? [])),
             'timecreated' => time(),
             'timemodified' => time(),
         ];
@@ -200,8 +206,17 @@ if ($data = $form->get_data()) {
             \core\notification::success(get_string('createsuccess', 'block_google_site_creator'));
         }
     } catch (Throwable $e) {
-        debugging('Google Site create failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
-        \core\notification::error(get_string('createfailed', 'block_google_site_creator'));
+        $debuginfo = ($e instanceof moodle_exception) ? (string)$e->debuginfo : '';
+        block_google_site_creator_debug_log(
+            'Google Site create failed: ' . $e->getMessage()
+            . ($debuginfo !== '' ? ' | ' . $debuginfo : '')
+        );
+        $detail = $e->getMessage() . ' ' . $debuginfo;
+        if (stripos($detail, 'notFound') !== false || stripos($detail, 'File not found') !== false) {
+            \core\notification::error(get_string('templatenotaccessible', 'block_google_site_creator'));
+        } else {
+            \core\notification::error(get_string('createfailed', 'block_google_site_creator'));
+        }
     }
     redirect(new moodle_url('/course/view.php', ['id' => $course->id]));
 }

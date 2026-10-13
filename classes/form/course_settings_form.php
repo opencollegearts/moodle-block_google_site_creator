@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Course-level settings: template ID and optional Course Google Group email.
+ * Course-level settings: template selection and optional Course Google Group email.
  *
  * @package   block_google_site_creator
  * @copyright 2026 Paul Vincent
@@ -27,6 +27,7 @@ namespace block_google_site_creator\form;
 defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->libdir . '/formslib.php');
+require_once(__DIR__ . '/../../lib.php');
 
 /**
  * Course-level settings form.
@@ -43,11 +44,15 @@ class course_settings_form extends \moodleform {
         $mform->addElement('hidden', 'courseid', $custom['courseid'] ?? 0);
         $mform->setType('courseid', PARAM_INT);
 
-        $mform->addElement('text', 'template_id', get_string('coursetemplate', 'block_google_site_creator'), ['size' => 60]);
-        $mform->setType('template_id', PARAM_TEXT);
+        $options = block_google_site_creator_get_template_options(true);
+        $mform->addElement('select', 'template_id', get_string('coursetemplate', 'block_google_site_creator'), $options);
+        $mform->setType('template_id', PARAM_ALPHANUMEXT);
         $mform->addHelpButton('template_id', 'coursetemplate', 'block_google_site_creator');
-        if ($existing && $existing->template_id !== null) {
+        if ($existing && !empty($existing->template_id)
+                && block_google_site_creator_is_allowed_template_id((string)$existing->template_id)) {
             $mform->setDefault('template_id', $existing->template_id);
+        } else {
+            $mform->setDefault('template_id', '');
         }
 
         $mform->addElement('text', 'unit_group_email', get_string('unitgroup', 'block_google_site_creator'), ['size' => 60]);
@@ -58,5 +63,21 @@ class course_settings_form extends \moodleform {
         }
 
         $this->add_action_buttons(true, get_string('savechanges'));
+    }
+
+    /**
+     * Ensure the selected template is empty or in the admin allowlist.
+     *
+     * @param array $data
+     * @param array $files
+     * @return array
+     */
+    public function validation($data, $files) {
+        $errors = parent::validation($data, $files);
+        $templateid = trim((string)($data['template_id'] ?? ''));
+        if ($templateid !== '' && !block_google_site_creator_is_allowed_template_id($templateid)) {
+            $errors['template_id'] = get_string('invalidtemplate', 'block_google_site_creator');
+        }
+        return $errors;
     }
 }

@@ -42,7 +42,12 @@ class create_site extends \external_api {
             'courseid' => new \external_value(PARAM_INT, 'Course ID'),
             'userid' => new \external_value(PARAM_INT, 'User ID (owner of the site)'),
             'title' => new \external_value(PARAM_TEXT, 'Site title'),
-            'templateid' => new \external_value(PARAM_TEXT, 'Template Drive file ID (optional; overrides course/site default)', VALUE_OPTIONAL, null),
+            'templateid' => new \external_value(
+                PARAM_ALPHANUMEXT,
+                'Template Drive file ID from the admin-managed catalogue (optional; overrides course/site default)',
+                VALUE_OPTIONAL,
+                null
+            ),
             'visibility' => new \external_value(
                 PARAM_ALPHANUMEXT,
                 'Visibility: course_teachers, course_participants, tutor_group, course_group, organisation_group (legacy: tutors, unit_group, all_oca)',
@@ -53,7 +58,7 @@ class create_site extends \external_api {
     }
 
     public static function execute(int $courseid, int $userid, string $title, ?string $templateid, string $visibility): array {
-        global $DB;
+        global $DB, $USER;
 
         $params = self::validate_parameters(self::execute_parameters(), [
             'courseid' => $courseid,
@@ -74,11 +79,11 @@ class create_site extends \external_api {
         require_capability('block/google_site_creator:create_for_others', \context_system::instance());
 
         $templateid = !empty(trim($templateid ?? '')) ? trim($templateid) : block_google_site_creator_get_template_id($courseid);
-        if (empty($templateid)) {
-            throw new \moodle_exception('notemplate', 'block_google_site_creator');
+        if (empty($templateid) || !block_google_site_creator_is_allowed_template_id($templateid)) {
+            throw new \moodle_exception('invalidtemplate', 'block_google_site_creator');
         }
 
-        $allowed = array_keys(block_google_site_creator_get_visibility_options($courseid));
+        $allowed = array_keys(block_google_site_creator_get_visibility_options($courseid, (int)$USER->id));
         if (!in_array($visibility, $allowed, true)) {
             throw new \invalid_parameter_exception('visibility must be one of: ' . implode(', ', $allowed));
         }
@@ -106,7 +111,7 @@ class create_site extends \external_api {
             throw new \moodle_exception('createfailed', 'block_google_site_creator');
         }
 
-        block_google_site_creator_sync_visibility_permission(
+        $shareresult = block_google_site_creator_sync_visibility_permission(
             $drive,
             $newfileid,
             $courseid,
@@ -121,6 +126,7 @@ class create_site extends \external_api {
             'drive_file_id' => $newfileid,
             'url' => $url,
             'visibility' => $visibility,
+            'managed_permissions' => json_encode(array_values($shareresult['permissionids'] ?? [])),
             'timecreated' => time(),
             'timemodified' => time(),
         ];

@@ -67,21 +67,32 @@ final class visibility_test extends \advanced_testcase {
         );
     }
 
-    public function test_visibility_options_moodle_only_by_default(): void {
+    public function test_visibility_options_teachers_without_managecourse(): void {
         $course = $this->getDataGenerator()->create_course();
+        $teacher = $this->getDataGenerator()->create_and_enrol($course, 'teacher');
         set_config('tutorgroupemail', '', 'block_google_site_creator');
         set_config('organisationgroupemail', '', 'block_google_site_creator');
 
-        $options = block_google_site_creator_get_visibility_options((int)$course->id);
+        $options = block_google_site_creator_get_visibility_options((int)$course->id, (int)$teacher->id);
+        $this->assertArrayHasKey(BLOCK_GOOGLE_SITE_CREATOR_VIS_COURSE_TEACHERS, $options);
+        $this->assertArrayNotHasKey(BLOCK_GOOGLE_SITE_CREATOR_VIS_COURSE_PARTICIPANTS, $options);
+        $this->assertArrayNotHasKey(BLOCK_GOOGLE_SITE_CREATOR_VIS_TUTOR_GROUP, $options);
+    }
+
+    public function test_visibility_options_participants_requires_managecourse(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $editingteacher = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
+        set_config('tutorgroupemail', '', 'block_google_site_creator');
+        set_config('organisationgroupemail', '', 'block_google_site_creator');
+
+        $options = block_google_site_creator_get_visibility_options((int)$course->id, (int)$editingteacher->id);
         $this->assertArrayHasKey(BLOCK_GOOGLE_SITE_CREATOR_VIS_COURSE_TEACHERS, $options);
         $this->assertArrayHasKey(BLOCK_GOOGLE_SITE_CREATOR_VIS_COURSE_PARTICIPANTS, $options);
-        $this->assertArrayNotHasKey(BLOCK_GOOGLE_SITE_CREATOR_VIS_TUTOR_GROUP, $options);
-        $this->assertArrayNotHasKey(BLOCK_GOOGLE_SITE_CREATOR_VIS_COURSE_GROUP, $options);
-        $this->assertArrayNotHasKey(BLOCK_GOOGLE_SITE_CREATOR_VIS_ORGANISATION_GROUP, $options);
     }
 
     public function test_visibility_options_include_configured_groups(): void {
         $course = $this->getDataGenerator()->create_course();
+        $editingteacher = $this->getDataGenerator()->create_and_enrol($course, 'editingteacher');
         set_config('tutorgroupemail', 'tutors@example.edu', 'block_google_site_creator');
         set_config('organisationgroupemail', 'everyone@example.edu', 'block_google_site_creator');
 
@@ -93,7 +104,7 @@ final class visibility_test extends \advanced_testcase {
             'timemodified' => time(),
         ]);
 
-        $options = block_google_site_creator_get_visibility_options((int)$course->id);
+        $options = block_google_site_creator_get_visibility_options((int)$course->id, (int)$editingteacher->id);
         $this->assertArrayHasKey(BLOCK_GOOGLE_SITE_CREATOR_VIS_TUTOR_GROUP, $options);
         $this->assertArrayHasKey(BLOCK_GOOGLE_SITE_CREATOR_VIS_COURSE_GROUP, $options);
         $this->assertArrayHasKey(BLOCK_GOOGLE_SITE_CREATOR_VIS_ORGANISATION_GROUP, $options);
@@ -112,6 +123,36 @@ final class visibility_test extends \advanced_testcase {
         $this->assertSame('reader', $targets[0]['role']);
     }
 
+    public function test_moodle_teachers_prefers_tutor_google_group(): void {
+        $course = $this->getDataGenerator()->create_course();
+        set_config('tutorgroupemail', 'tutors@example.edu', 'block_google_site_creator');
+        $targets = block_google_site_creator_resolve_share_targets(
+            BLOCK_GOOGLE_SITE_CREATOR_VIS_COURSE_TEACHERS,
+            (int)$course->id
+        );
+        $this->assertCount(1, $targets);
+        $this->assertSame('tutors@example.edu', $targets[0]['email']);
+        $this->assertSame('group', $targets[0]['type']);
+    }
+
+    public function test_moodle_participants_prefers_course_google_group(): void {
+        $course = $this->getDataGenerator()->create_course();
+        global $DB;
+        $DB->insert_record('block_google_site_creator_course', (object)[
+            'courseid' => $course->id,
+            'template_id' => '',
+            'unit_group_email' => 'course@example.edu',
+            'timemodified' => time(),
+        ]);
+        $targets = block_google_site_creator_resolve_share_targets(
+            BLOCK_GOOGLE_SITE_CREATOR_VIS_COURSE_PARTICIPANTS,
+            (int)$course->id
+        );
+        $this->assertCount(1, $targets);
+        $this->assertSame('course@example.edu', $targets[0]['email']);
+        $this->assertSame('group', $targets[0]['type']);
+    }
+
     public function test_allowed_email_domains(): void {
         set_config('allowedemaildomains', '', 'block_google_site_creator');
         $this->assertTrue(block_google_site_creator_can_transfer_to_user_email('anyone@elsewhere.com'));
@@ -121,5 +162,23 @@ final class visibility_test extends \advanced_testcase {
         $this->assertTrue(block_google_site_creator_can_transfer_to_user_email('user@school.org'));
         $this->assertFalse(block_google_site_creator_can_transfer_to_user_email('user@elsewhere.com'));
         $this->assertFalse(block_google_site_creator_can_transfer_to_user_email(''));
+    }
+
+    public function test_template_catalogue_parsing_and_allowlist(): void {
+        set_config(
+            'templates',
+            "Portfolio|1Pz0Vezda67P17oryladHG7NSTBCBNxfW\n# comment\nBad|/etc/passwd\nUnit|abcDEF1234_-xyz",
+            'block_google_site_creator'
+        );
+        set_config('defaulttemplate', '1Pz0Vezda67P17oryladHG7NSTBCBNxfW', 'block_google_site_creator');
+
+        $templates = block_google_site_creator_get_templates();
+        $this->assertArrayHasKey('1Pz0Vezda67P17oryladHG7NSTBCBNxfW', $templates);
+        $this->assertArrayHasKey('abcDEF1234_-xyz', $templates);
+        $this->assertArrayNotHasKey('/etc/passwd', $templates);
+        $this->assertTrue(block_google_site_creator_is_allowed_template_id('abcDEF1234_-xyz'));
+        $this->assertFalse(block_google_site_creator_is_allowed_template_id('not-in-list-xxxxxxxxxx'));
+        $this->assertFalse(block_google_site_creator_is_valid_drive_file_id('id/with/slash'));
+        $this->assertFalse(block_google_site_creator_is_valid_drive_file_id('short'));
     }
 }

@@ -134,6 +134,21 @@ class drive_service {
     }
 
     /**
+     * Validate and encode a Drive file/permission id for use in a URL path segment.
+     *
+     * @param string $id
+     * @return string
+     * @throws \moodle_exception
+     */
+    protected function encode_drive_id(string $id): string {
+        $id = trim($id);
+        if ($id === '' || !preg_match('/^[A-Za-z0-9_-]{10,256}$/', $id)) {
+            throw new \moodle_exception('invaliddriveid', 'block_google_site_creator');
+        }
+        return rawurlencode($id);
+    }
+
+    /**
      * Make an authenticated request to Drive API.
      *
      * @param string $method GET|POST|PATCH|DELETE
@@ -173,18 +188,26 @@ class drive_service {
     /**
      * Copy a Drive file (template) with a new name and optional parent folder.
      *
-     * @param string $fileId Template file ID
-     * @param string $newName Title for the copy
-     * @param string|null $parentId Optional folder ID to place the copy in
+     * @param string $fileid Template file ID
+     * @param string $newname Title for the copy
+     * @param string|null $parentid Optional folder ID to place the copy in
      * @return array With keys id, name, webViewLink (or webContentLink)
      * @throws \moodle_exception
      */
-    public function copy_file(string $fileId, string $newName, ?string $parentId = null): array {
-        $body = ['name' => $newName];
-        if ($parentId !== null && $parentId !== '') {
-            $body['parents'] = [$parentId];
+    public function copy_file(string $fileid, string $newname, ?string $parentid = null): array {
+        $body = ['name' => $newname];
+        if ($parentid !== null && $parentid !== '') {
+            // Parent IDs in the JSON body are not path segments; still reject unsafe values.
+            if (!preg_match('/^[A-Za-z0-9_-]{10,256}$/', trim($parentid))) {
+                throw new \moodle_exception('invaliddriveid', 'block_google_site_creator');
+            }
+            $body['parents'] = [trim($parentid)];
         }
-        $result = $this->request('POST', '/files/' . $fileId . '/copy?supportsAllDrives=true&fields=id,name,webViewLink,webContentLink', $body);
+        $result = $this->request(
+            'POST',
+            '/files/' . $this->encode_drive_id($fileid) . '/copy?supportsAllDrives=true&fields=id,name,webViewLink,webContentLink',
+            $body
+        );
         return $result;
     }
 
@@ -198,7 +221,7 @@ class drive_service {
     public function update_file_metadata(string $fileid, array $metadata): array {
         return $this->request(
             'PATCH',
-            '/files/' . $fileid . '?supportsAllDrives=true&fields=id,name,description,webViewLink,webContentLink',
+            '/files/' . $this->encode_drive_id($fileid) . '?supportsAllDrives=true&fields=id,name,description,webViewLink,webContentLink',
             $metadata
         );
     }
@@ -208,15 +231,15 @@ class drive_service {
      * Searches for a folder with the given name in the root; if not found, creates it.
      * Note: Service account has its "own" Drive; if you need user's Drive, use domain-wide delegation and impersonate.
      *
-     * @param string $folderName Course short name
-     * @param string|null $parentId Parent folder ID (null = root)
+     * @param string $foldername Course short name
+     * @param string|null $parentid Parent folder ID (null = root)
      * @return string Folder ID
      * @throws \moodle_exception
      */
-    public function ensure_folder_by_name(string $folderName, ?string $parentId = null): string {
-        $q = "name = '" . str_replace("'", "\\'", $folderName) . "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
-        if ($parentId) {
-            $q .= " and '" . str_replace("'", "\\'", $parentId) . "' in parents";
+    public function ensure_folder_by_name(string $foldername, ?string $parentid = null): string {
+        $q = "name = '" . str_replace("'", "\\'", $foldername) . "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
+        if ($parentid) {
+            $q .= " and '" . str_replace("'", "\\'", $parentid) . "' in parents";
         } else {
             $q .= " and 'root' in parents";
         }
@@ -228,11 +251,11 @@ class drive_service {
             return $list['files'][0]['id'];
         }
         $body = [
-            'name' => $folderName,
+            'name' => $foldername,
             'mimeType' => 'application/vnd.google-apps.folder',
         ];
-        if ($parentId) {
-            $body['parents'] = [$parentId];
+        if ($parentid) {
+            $body['parents'] = [$parentid];
         }
         $created = $this->request('POST', '/files?fields=id&supportsAllDrives=true', $body);
         if (empty($created['id'])) {
@@ -244,20 +267,23 @@ class drive_service {
     /**
      * Add a permission to a file (share with user/group). No notification email.
      *
-     * @param string $fileId Drive file ID
-     * @param string $emailAddress Email to share with
+     * @param string $fileid Drive file ID
+     * @param string $emailaddress Email to share with
      * @param string $role reader|writer|commenter
-     * @return void
+     * @param string $type user|group
+     * @param array $queryparams Extra Drive API query parameters
+     * @param bool $sendnotificationemail Whether Google should email the recipient
+     * @return string|null New permission id when returned by Drive
      * @throws \moodle_exception
      */
     public function add_permission(
-        string $fileId,
-        string $emailAddress,
+        string $fileid,
+        string $emailaddress,
         string $role = 'writer',
         string $type = 'user',
         array $queryparams = [],
         bool $sendnotificationemail = false
-    ): void {
+    ): ?string {
         $query = array_merge(
             [
                 'fields' => 'id',
@@ -269,9 +295,15 @@ class drive_service {
         $body = [
             'type' => $type,
             'role' => $role,
-            'emailAddress' => $emailAddress,
+            'emailAddress' => $emailaddress,
         ];
-        $this->request('POST', '/files/' . $fileId . '/permissions?' . http_build_query($query), $body);
+        $result = $this->request(
+            'POST',
+            '/files/' . $this->encode_drive_id($fileid) . '/permissions?' . http_build_query($query),
+            $body
+        );
+        $permissionid = trim((string)($result['id'] ?? ''));
+        return $permissionid !== '' ? $permissionid : null;
     }
 
     /**
@@ -283,7 +315,8 @@ class drive_service {
     public function list_permissions(string $fileid): array {
         $response = $this->request(
             'GET',
-            '/files/' . $fileid . '/permissions?supportsAllDrives=true&fields=permissions(id,type,emailAddress,role)'
+            '/files/' . $this->encode_drive_id($fileid) .
+                '/permissions?supportsAllDrives=true&fields=permissions(id,type,emailAddress,role)'
         );
         return $response['permissions'] ?? [];
     }
@@ -296,7 +329,11 @@ class drive_service {
      * @return void
      */
     public function delete_permission(string $fileid, string $permissionid): void {
-        $this->request('DELETE', '/files/' . $fileid . '/permissions/' . $permissionid . '?supportsAllDrives=true');
+        $this->request(
+            'DELETE',
+            '/files/' . $this->encode_drive_id($fileid) . '/permissions/' .
+                rawurlencode(trim($permissionid)) . '?supportsAllDrives=true'
+        );
     }
 
     /**
@@ -312,7 +349,8 @@ class drive_service {
         $query = array_merge(['fields' => 'id', 'supportsAllDrives' => 'true'], $queryparams);
         $this->request(
             'PATCH',
-            '/files/' . $fileid . '/permissions/' . $permissionid . '?' . http_build_query($query),
+            '/files/' . $this->encode_drive_id($fileid) . '/permissions/' .
+                rawurlencode(trim($permissionid)) . '?' . http_build_query($query),
             ['role' => $role]
         );
     }
@@ -344,12 +382,12 @@ class drive_service {
     /**
      * Transfer ownership of a Drive file/folder to another user in the same Workspace domain.
      *
-     * @param string $fileId
+     * @param string $fileid
      * @param string $newowneremail
      * @param bool $movetonewownersroot
      * @return void
      */
-    public function transfer_ownership(string $fileId, string $newowneremail, bool $movetonewownersroot = false): void {
+    public function transfer_ownership(string $fileid, string $newowneremail, bool $movetonewownersroot = false): void {
         $newowneremail = trim($newowneremail);
         if ($newowneremail === '') {
             throw new \moodle_exception('createfailed', 'block_google_site_creator', '', null, 'Missing new owner email');
@@ -361,11 +399,12 @@ class drive_service {
             $query .= '&moveToNewOwnersRoot=true';
         }
 
-        $permissionid = $this->find_permission_id_for_email($fileId, $newowneremail);
+        $encodedfileid = $this->encode_drive_id($fileid);
+        $permissionid = $this->find_permission_id_for_email($fileid, $newowneremail);
         if ($permissionid !== null) {
             $this->request(
                 'PATCH',
-                '/files/' . $fileId . '/permissions/' . rawurlencode($permissionid) . '?' . $query,
+                '/files/' . $encodedfileid . '/permissions/' . rawurlencode($permissionid) . '?' . $query,
                 ['role' => 'owner']
             );
             return;
@@ -373,7 +412,7 @@ class drive_service {
 
         $this->request(
             'POST',
-            '/files/' . $fileId . '/permissions?' . $query,
+            '/files/' . $encodedfileid . '/permissions?' . $query,
             [
                 'type' => 'user',
                 'role' => 'owner',

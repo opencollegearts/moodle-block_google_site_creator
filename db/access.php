@@ -43,8 +43,11 @@ $capabilities = [
         'clonepermissionsfrom' => 'moodle/my:manageblocks',
     ],
     'block/google_site_creator:create' => [
+        'riskbitmask' => RISK_PERSONAL | RISK_SPAM,
         'captype' => 'write',
         'contextlevel' => CONTEXT_COURSE,
+        // Students may create sites. Course-participants sharing (individual emails)
+        // remains limited to :managecourse; prefer Google Groups where possible.
         'archetypes' => [
             'student' => CAP_ALLOW,
             'teacher' => CAP_ALLOW,
@@ -53,6 +56,7 @@ $capabilities = [
         ],
     ],
     'block/google_site_creator:managecourse' => [
+        'riskbitmask' => RISK_PERSONAL,
         'captype' => 'write',
         'contextlevel' => CONTEXT_COURSE,
         'archetypes' => [
@@ -61,6 +65,7 @@ $capabilities = [
         ],
     ],
     'block/google_site_creator:create_for_others' => [
+        'riskbitmask' => RISK_PERSONAL | RISK_SPAM,
         'captype' => 'write',
         'contextlevel' => CONTEXT_SYSTEM,
         'archetypes' => [

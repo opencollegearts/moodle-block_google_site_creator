@@ -22,6 +22,8 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+namespace block_google_site_creator\form;
+
 defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->libdir . '/formslib.php');
@@ -32,7 +34,7 @@ require_once(__DIR__ . '/../../lib.php');
  *
  * @package   block_google_site_creator
  */
-class block_google_site_creator_create_site_form extends moodleform {
+class create_site_form extends \moodleform {
 
     protected function definition() {
         $mform = $this->_form;

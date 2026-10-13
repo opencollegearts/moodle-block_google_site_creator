@@ -53,9 +53,13 @@ if ($form->is_cancelled()) {
 }
 
 if ($data = $form->get_data()) {
+    $templateid = trim((string)($data->template_id ?? ''));
+    if ($templateid !== '' && !block_google_site_creator_is_allowed_template_id($templateid)) {
+        throw new moodle_exception('invalidtemplate', 'block_google_site_creator');
+    }
     $record = (object)[
         'courseid' => $course->id,
-        'template_id' => trim($data->template_id ?? ''),
+        'template_id' => $templateid,
         'unit_group_email' => trim($data->unit_group_email ?? ''),
         'timemodified' => time(),
     ];

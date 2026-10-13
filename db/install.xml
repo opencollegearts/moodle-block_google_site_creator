@@ -14,6 +14,7 @@
                 <FIELD NAME="drive_file_id" TYPE="char" LENGTH="128" NOTNULL="true" SEQUENCE="false"/>
                 <FIELD NAME="url" TYPE="char" LENGTH="512" NOTNULL="true" SEQUENCE="false"/>
                 <FIELD NAME="visibility" TYPE="char" LENGTH="32" NOTNULL="true" SEQUENCE="false" COMMENT="course_teachers, course_participants, tutor_group, course_group, organisation_group"/>
+                <FIELD NAME="managed_permissions" TYPE="text" NOTNULL="false" SEQUENCE="false" COMMENT="JSON array of Drive permission IDs created for visibility sharing"/>
                 <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
                 <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
             </FIELDS>

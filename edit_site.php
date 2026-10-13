@@ -24,8 +24,6 @@
 
 require_once(__DIR__ . '/../../config.php');
 require_once(__DIR__ . '/lib.php');
-require_once(__DIR__ . '/classes/form/edit_site_form.php');
-require_once(__DIR__ . '/classes/drive_service.php');
 
 $courseid = required_param('courseid', PARAM_INT);
 $siteid = optional_param('siteid', 0, PARAM_INT);
@@ -115,18 +113,25 @@ if ($data = $form->get_data()) {
                     'description' => $updated->description,
                 ]
             );
-            $shareok = block_google_site_creator_sync_visibility_permission(
+            $shareresult = block_google_site_creator_sync_visibility_permission(
                 $drive,
                 (string)$site->drive_file_id,
                 (int)$course->id,
                 (string)$updated->visibility,
-                (int)$site->userid
+                (int)$site->userid,
+                $site
             );
-            if (!$shareok) {
+            $DB->set_field(
+                'block_google_site_creator_sites',
+                'managed_permissions',
+                json_encode(array_values($shareresult['permissionids'] ?? [])),
+                ['id' => $site->id]
+            );
+            if (empty($shareresult['ok'])) {
                 \core\notification::warning(get_string('createsuccesspartialshare', 'block_google_site_creator'));
             }
-        } catch (Exception $e) {
-            debugging('Google Site update failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        } catch (Throwable $e) {
+            block_google_site_creator_debug_log('Google Site update failed: ' . $e->getMessage());
             \core\notification::warning(get_string('editsitepartialsave', 'block_google_site_creator'));
         }
     }

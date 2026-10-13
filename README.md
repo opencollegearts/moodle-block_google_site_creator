@@ -27,6 +27,22 @@ This plugin does **not** require Composer or other PHP dependency managers. It t
 2. Visit **Site administration → Notifications** to install the block and create its database tables.
 3. Purge caches if you update language strings or code on an existing site.
 
+### Building a Marketplace release ZIP
+
+Do **not** zip the folder with macOS Finder (that adds `__MACOSX/`), and do **not** include `.git/` or a nested `.zip`.
+
+From a clean git checkout (commit your changes first when possible):
+
+```bash
+./scripts/build-release-zip.sh
+```
+
+This runs `git archive` with prefix `google_site_creator/` and writes the ZIP **outside** the plugin directory (for example `../block_google_site_creator-1.1.3-2026032903.zip`). Equivalent manual command when `HEAD` is clean:
+
+```bash
+git archive --format=zip --prefix=google_site_creator/ -o ../block_google_site_creator.zip HEAD
+```
+
 ## Configuration
 
 ### Site administration
@@ -35,8 +51,10 @@ This plugin does **not** require Composer or other PHP dependency managers. It t
 
 | Setting | Purpose |
 |---------|---------|
-| **Default Google Site Template ID** | Drive file ID of the template site used when a course has no course-specific template |
-| **Service account JSON** | Prefer a **path** to the JSON key under `$CFG->dataroot` (or absolute). Pasting JSON works but stores a secret in the database |
+| **Template catalogue** | Admin-managed list of allowed templates, one per line as `Title\|DriveFileId`. Only these IDs can be used |
+| **Default template** | Catalogue entry used when a course has not chosen a specific template |
+| **Service account JSON file path** | Preferred. Path to the key file under `$CFG->dataroot` (outside the web root) |
+| **Service account JSON (encrypted)** | Optional. Paste JSON once; Moodle encrypts it and does not show it again in clear text |
 | **Delegated Workspace user** | Optional email to impersonate via domain-wide delegation |
 | **Allowed email domains for ownership** | Optional comma-separated domains eligible for automatic ownership transfer. Empty = any valid user email |
 | **Tutor Google Group email** | Optional. Enables the “Tutor Google Group” visibility option |
@@ -44,33 +62,44 @@ This plugin does **not** require Composer or other PHP dependency managers. It t
 
 Google Group settings are **optional**. Institutions that share only via Moodle enrolments can leave them empty.
 
+Drive file IDs must match `^[A-Za-z0-9_-]{10,128}$`. Free-text / arbitrary Drive IDs are rejected so teachers cannot copy files outside the catalogue via the delegated account.
+
 ### Course settings (teachers)
 
 Add the block to a course, then use **Course settings** in the block footer (capability **Manage course Google Site settings**):
 
 | Setting | Purpose |
 |---------|---------|
-| **Course Site Template ID** | Optional Drive template for this course |
+| **Course template** | Optional selection from the admin catalogue (or use the site default) |
 | **Course Google Group** | Optional Google Group email for this course. Enables the “Course Google Group” visibility option |
 
 ## Visibility and sharing
 
 When a user creates or edits a site they choose a **visibility** mode. Sharing is applied as Google Drive permissions (no notification emails).
 
-### Moodle-based (always available)
+**Prefer Google Groups** whenever your institution can use them. Group sharing grants access via a single group address and avoids listing every participant’s personal email in the Drive sharing UI (visible to writers and the owner).
 
-These share the Drive file with enrolled users’ **email addresses** (`type=user`):
+### Capability defaults
 
-| Option | Recipients |
-|--------|------------|
-| **Course teachers (Moodle)** | Active enrolled users with `moodle/course:manageactivities` |
-| **Course participants (Moodle)** | All active enrolled users with a valid email |
+| Capability | Default archetypes | Notes |
+|------------|-------------------|--------|
+| `block/google_site_creator:create` | student, teacher, editingteacher, manager | Marked `RISK_PERSONAL` because sharing may send emails to Google |
+| `block/google_site_creator:managecourse` | editingteacher, manager | Required for course settings and for **Course participants (Moodle)** visibility |
+
+Sites that must not allow student-created sites can revoke `:create` from the student role.
+
+### Moodle-based options
+
+| Option | Who can select it | Recipients |
+|--------|-------------------|------------|
+| **Course teachers (Moodle)** | Users with `:create` | If a **Tutor Google Group** is configured, that group is used. Otherwise: active enrolled users with `moodle/course:manageactivities` (`type=user`) |
+| **Course participants (Moodle)** | Users with `:managecourse` only | If a **Course Google Group** is configured, that group is used. Otherwise: all active enrolled users with a valid email (`type=user`) |
 
 Default for new sites: **Course teachers (Moodle)**.
 
-Large courses issue one Drive API call per recipient and may be slower or hit Google quotas.
+Individual-email fallbacks issue one Drive API call per recipient and may be slower or hit Google quotas on large courses.
 
-### Google Groups-based (optional)
+### Google Groups-based (optional, preferred)
 
 These options appear only when the corresponding Google Group email is configured:
 
@@ -80,14 +109,13 @@ These options appear only when the corresponding Google Group email is configure
 | **Course Google Group** | Course setting group email (`type=group`, writer) |
 | **Organisation Google Group** | Site admin organisation group email (`type=group`, reader) |
 
-If your institution does not use Google Groups, leave the group settings empty and use Moodle-based options only.
-
 ## Web services
 
 Two external functions are available for REST/admin integration:
 
 1. **`block_google_site_creator_get_site_details`** — parameters: `siteid`  
 2. **`block_google_site_creator_create_site`** — parameters: `courseid`, `userid`, `title`, optional `templateid`, `visibility`  
+   `templateid` must be an ID from the admin template catalogue.  
    Visibility values: `course_teachers`, `course_participants`, `tutor_group`, `course_group`, `organisation_group`  
    Legacy aliases still accepted: `tutors`, `unit_group`, `all_oca`
 
@@ -104,11 +132,34 @@ There is **no hard dependency** on any other contributed plugin.
 
 ## Privacy
 
-The plugin stores site metadata in Moodle and sends titles, descriptions, and share recipient emails to Google when creating or updating Drive permissions. See the in-plugin Privacy API implementation for details shown to site administrators.
+### Data stored in Moodle
+
+- Created site records: user id, course id, title, description, Drive file id, URL, visibility, timestamps
+- Optional banner images in the course file area
+- Course settings: template id and optional Course Google Group email
+
+### Personal data sent to Google
+
+When a site is created or its visibility is updated, the plugin calls the Google Drive API and may transmit:
+
+| Data | When |
+|------|------|
+| Site title and description | Create / metadata update |
+| Creator email | Ownership transfer or create-as-user (if eligible) |
+| **Recipient email addresses** | Sharing: either a Google Group email, or (fallback) individual Moodle user emails for teachers/participants |
+| Delegated Workspace user email | If domain-wide delegation is configured |
+
+Google Drive shows the sharing list to the file owner and to users with writer access. That is why this plugin:
+
+1. Marks `:create` with `RISK_PERSONAL`
+2. Restricts **Course participants (Moodle)** (individual emails) to `:managecourse`
+3. Prefers Google Group sharing over individual addresses when a matching group is configured
+
+See the in-plugin Privacy API provider for the metadata declared to Moodle administrators.
 
 ## Support
 
-- Issue tracker: use the public GitHub issues for this repository (recommended name: `moodle-block_google_site_creator`)
+- Source and issues: [opencollegearts/moodle-block_google_site_creator](https://github.com/opencollegearts/moodle-block_google_site_creator)
 - Contributions welcome under GPL v3+
 
 ## Credits
