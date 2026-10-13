@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.9 - 2026-10-13
+
+- Declare Moodle 4.0–5.3 compatibility via `$plugin->supported` (no Moodle 5 block-API blockers found).
+
 ## 1.1.8 - 2026-10-13
 
 - Fix create flow aborting under Whoops/debugdisplay: log fallback errors without `debugging()` so create-as-user can fall back to the delegated account.
