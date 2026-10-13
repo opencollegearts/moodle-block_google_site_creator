@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 - 2026-10-13
+
+- Add Moodle 2 backup/restore support for course settings, created site records, and site banner files.
+
 ## 1.1.0 - 2026-03-29
 
 - Generalise plugin for community / Marketplace use (remove institution-specific defaults and branding).
