@@ -9,12 +9,12 @@ Block that lets course users create a Google Site from a Google Drive template (
 **Author:** Paul Vincent  
 **Developed by:** [Open College of the Arts (OCA)](https://www.oca.ac.uk/)  
 **Component:** `block_google_site_creator`  
-**Requires:** Moodle 4.0 or later (compatible with Moodle 4.x and 5.x; `$plugin->supported` = 4.0–5.3)  
+**Requires:** Moodle 4.3 or later (compatible with Moodle 4.3–5.3; `$plugin->supported` = 4.3–5.3)  
 **License:** GNU GPL v3 or later
 
 ## Requirements
 
-- Moodle 4.0+ (compatible with Moodle 5.0–5.3; PHP 8.2+ required by Moodle 5.0+, PHP 8.3+ by Moodle 5.2+)
+- Moodle 4.3+ (compatible with Moodle 5.0–5.3; PHP 8.0+ required by Moodle 4.3+, PHP 8.2+ by Moodle 5.0+, PHP 8.3+ by Moodle 5.2+)
 - A Google Cloud project with the **Google Drive API** enabled
 - A Google service account JSON key (and, for ownership transfer / acting as users, Google Workspace **domain-wide delegation**)
 - Optional: Google Groups if you want group-based sharing in addition to Moodle enrolment-based sharing
@@ -37,7 +37,7 @@ From a clean git checkout (commit your changes first when possible):
 ./scripts/build-release-zip.sh
 ```
 
-This runs `git archive` with prefix `google_site_creator/` and writes the ZIP **outside** the plugin directory (for example `../block_google_site_creator-1.1.3-2026032903.zip`). Equivalent manual command when `HEAD` is clean:
+This runs `git archive` with prefix `google_site_creator/` and writes the ZIP **outside** the plugin directory (for example `../block_google_site_creator-1.1.10-2026101900.zip`). Equivalent manual command when `HEAD` is clean:
 
 ```bash
 git archive --format=zip --prefix=google_site_creator/ -o ../block_google_site_creator.zip HEAD

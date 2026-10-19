@@ -25,9 +25,9 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'block_google_site_creator';
-$plugin->version   = 2026032909;
-$plugin->requires  = 2022041900; // Moodle 4.0.
-// Compatible with Moodle 4.0 through 5.3 (current LMS branches).
-$plugin->supported = [400, 503];
+$plugin->version   = 2026101900;
+$plugin->requires  = 2023100900; // Moodle 4.3 (table name length + PHP 8.0).
+// Compatible with Moodle 4.3 through 5.3 (current LMS branches).
+$plugin->supported = [403, 503];
 $plugin->maturity  = MATURITY_BETA;
-$plugin->release   = '1.1.9';
+$plugin->release   = '1.1.10';

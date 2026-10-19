@@ -58,7 +58,7 @@ class create_site extends \external_api {
     }
 
     public static function execute(int $courseid, int $userid, string $title, ?string $templateid, string $visibility): array {
-        global $DB, $USER;
+        global $DB;
 
         $params = self::validate_parameters(self::execute_parameters(), [
             'courseid' => $courseid,
@@ -78,12 +78,16 @@ class create_site extends \external_api {
         self::validate_context($context);
         require_capability('block/google_site_creator:create_for_others', \context_system::instance());
 
+        $owner = $DB->get_record('user', ['id' => $userid, 'deleted' => 0], '*', MUST_EXIST);
+        require_capability('block/google_site_creator:create', $context, $owner);
+
         $templateid = !empty(trim($templateid ?? '')) ? trim($templateid) : block_google_site_creator_get_template_id($courseid);
         if (empty($templateid) || !block_google_site_creator_is_allowed_template_id($templateid)) {
             throw new \moodle_exception('invalidtemplate', 'block_google_site_creator');
         }
 
-        $allowed = array_keys(block_google_site_creator_get_visibility_options($courseid, (int)$USER->id));
+        // Visibility options are evaluated for the target owner, not the calling service user.
+        $allowed = array_keys(block_google_site_creator_get_visibility_options($courseid, (int)$owner->id));
         if (!in_array($visibility, $allowed, true)) {
             throw new \invalid_parameter_exception('visibility must be one of: ' . implode(', ', $allowed));
         }

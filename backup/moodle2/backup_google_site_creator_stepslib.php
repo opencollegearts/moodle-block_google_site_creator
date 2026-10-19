@@ -57,6 +57,7 @@ class backup_google_site_creator_block_structure_step extends backup_block_struc
             'drive_file_id',
             'url',
             'visibility',
+            'managed_permissions',
             'timecreated',
             'timemodified',
         ]);

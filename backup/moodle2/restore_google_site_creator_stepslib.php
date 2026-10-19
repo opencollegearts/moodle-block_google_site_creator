@@ -154,6 +154,7 @@ class restore_google_site_creator_block_structure_step extends restore_structure
             'drive_file_id' => $data->drive_file_id,
             'url' => $data->url,
             'visibility' => $data->visibility,
+            'managed_permissions' => $data->managed_permissions ?? null,
             'timecreated' => $data->timecreated ?? time(),
             'timemodified' => $data->timemodified ?? time(),
         ];

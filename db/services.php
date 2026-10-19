@@ -28,10 +28,10 @@ $functions = [
     'block_google_site_creator_get_site_details' => [
         'classname' => 'block_google_site_creator\external\get_site_details',
         'methodname' => 'execute',
-        'description' => 'Get Google Site details by record ID',
+        'description' => 'Get Google Site details by record ID (owner, course managers, or create_for_others)',
         'type' => 'read',
         'ajax' => true,
-        'capabilities' => 'block/google_site_creator:create',
+        'capabilities' => 'block/google_site_creator:create,block/google_site_creator:managecourse,block/google_site_creator:create_for_others',
     ],
     'block_google_site_creator_create_site' => [
         'classname' => 'block_google_site_creator\external\create_site',

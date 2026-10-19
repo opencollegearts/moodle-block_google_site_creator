@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.10 - 2026-10-19
+
+- Raise minimum Moodle version to 4.3 (XMLDB table-name length and PHP 8.0 APIs).
+- Add missing `error` language string used by Drive credential exceptions.
+- Privacy: declare and export `managed_permissions` on site records.
+- Backup/restore: include `managed_permissions` so ACL sync state survives course restore.
+- Web services: restrict `get_site_details` to site owner, `:managecourse`, or `:create_for_others`.
+- Web services: `create_site` validates the target owner and evaluates visibility options for that user.
+
 ## 1.1.9 - 2026-10-13
 
 - Declare Moodle 4.0–5.3 compatibility via `$plugin->supported` (no Moodle 5 block-API blockers found).

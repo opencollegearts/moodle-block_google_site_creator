@@ -58,6 +58,7 @@ class provider implements
             'drive_file_id' => 'privacy:metadata:block_google_site_creator_sites:drive_file_id',
             'url' => 'privacy:metadata:block_google_site_creator_sites:url',
             'visibility' => 'privacy:metadata:block_google_site_creator_sites:visibility',
+            'managed_permissions' => 'privacy:metadata:block_google_site_creator_sites:managed_permissions',
             'timecreated' => 'privacy:metadata:block_google_site_creator_sites:timecreated',
             'timemodified' => 'privacy:metadata:block_google_site_creator_sites:timemodified',
         ], 'privacy:metadata:block_google_site_creator_sites');
@@ -113,6 +114,7 @@ class provider implements
                     'url' => $site->url,
                     'drive_file_id' => $site->drive_file_id,
                     'visibility' => $site->visibility,
+                    'managed_permissions' => $site->managed_permissions,
                     'timecreated' => \core_privacy\local\request\transform::datetime($site->timecreated),
                     'timemodified' => \core_privacy\local\request\transform::datetime($site->timemodified),
                 ];

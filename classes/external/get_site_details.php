@@ -42,17 +42,21 @@ class get_site_details extends \external_api {
     }
 
     public static function execute(int $siteid): array {
-        global $DB;
+        global $DB, $USER;
         $params = self::validate_parameters(self::execute_parameters(), ['siteid' => $siteid]);
         $siteid = $params['siteid'];
 
         $site = $DB->get_record('block_google_site_creator_sites', ['id' => $siteid], '*', MUST_EXIST);
         $context = \context_course::instance($site->courseid);
         self::validate_context($context);
-        $systemcontext = \context_system::instance();
-        $canget = has_capability('block/google_site_creator:create', $context)
-            || has_capability('block/google_site_creator:create_for_others', $systemcontext);
-        if (!$canget) {
+
+        $isowner = ((int)$site->userid === (int)$USER->id);
+        $canmanagecourse = has_capability('block/google_site_creator:managecourse', $context);
+        $cancreateforothers = has_capability(
+            'block/google_site_creator:create_for_others',
+            \context_system::instance()
+        );
+        if (!$isowner && !$canmanagecourse && !$cancreateforothers) {
             throw new \moodle_exception('nopermissions', 'error');
         }
 
