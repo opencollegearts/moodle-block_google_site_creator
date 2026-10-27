@@ -27,22 +27,6 @@ This plugin does **not** require Composer or other PHP dependency managers. It t
 2. Visit **Site administration → Notifications** to install the block and create its database tables.
 3. Purge caches if you update language strings or code on an existing site.
 
-### Building a Marketplace release ZIP
-
-Do **not** zip the folder with macOS Finder (that adds `__MACOSX/`), and do **not** include `.git/` or a nested `.zip`.
-
-From a clean git checkout (commit your changes first when possible):
-
-```bash
-./scripts/build-release-zip.sh
-```
-
-This runs `git archive` with prefix `google_site_creator/` and writes the ZIP **outside** the plugin directory (for example `../block_google_site_creator-1.1.10-2026101900.zip`). Equivalent manual command when `HEAD` is clean:
-
-```bash
-git archive --format=zip --prefix=google_site_creator/ -o ../block_google_site_creator.zip HEAD
-```
-
 ## Configuration
 
 ### Site administration
